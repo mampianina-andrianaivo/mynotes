@@ -91,7 +91,7 @@ main{display:flex;flex-direction:column;height:100%;background:var(--panel);over
  <symbol id="i-ren" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol>
  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M5 19l1.5-5L16 4.5l3.5 3.5L10 17.5z"/><path d="M5 19l3.5-1"/></symbol>
  <symbol id="i-er" viewBox="0 0 24 24"><path d="M8 20h12"/><path d="M4.5 15.5l9-9a2 2 0 012.8 0l2.2 2.2a2 2 0 010 2.8L11 19H8z"/><path d="M9 11l5 5"/></symbol>
- <symbol id="i-erp" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" stroke-dasharray="2.5 2.5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></symbol>
+ <symbol id="i-erp" viewBox="0 0 24 24"><path d="M7 15.5l7-7a1.8 1.8 0 012.5 0l1 1a1.8 1.8 0 010 2.5l-6 6H8.5z"/><path d="M2.5 21h4M10.5 21h3M17.5 21h4"/></symbol>
  <symbol id="i-sel" viewBox="0 0 24 24"><path d="M12 4c5 0 8 2.5 8 5.5S16.5 15 12 15c-2 0-3.5-.4-4.6-1" stroke-dasharray="3 2.5"/><path d="M7.4 14C5 13 4 11.3 4 9.5 4 6.5 7 4 12 4"/><path d="M7.5 14c-1 1.5-.5 3.5 1.5 5"/></symbol>
  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 010 12" transform="translate(0 -6)"/></symbol>
  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 7l5 5-5 5"/><path d="M20 12H10a6 6 0 000 12" transform="translate(0 -6)"/></symbol>
@@ -105,7 +105,7 @@ main{display:flex;flex-direction:column;height:100%;background:var(--panel);over
   <div class="top"><h1>Not<b>or</b></h1><button class="new" id="new" aria-label="Nouvelle note">+</button></div>
   <div class="io">
    <button class="btn" id="exp">Exporter</button>
-   <button class="btn" id="zip">Tout en PDF</button>
+   <button class="btn" id="zip">Tout en zip</button>
    <label class="btn" id="impL">Importer<input type="file" id="imp" accept=".json,application/json" hidden></label>
   </div>
   <div class="warn" id="warn" hidden></div>
@@ -134,7 +134,7 @@ main{display:flex;flex-direction:column;height:100%;background:var(--panel);over
    <div class="stick"><canvas id="cv"></canvas><canvas id="live"></canvas></div>
    <div id="spacer"></div>
   </div>
-  <div class="pop" id="pop"><button id="p-copy">Copier</button><button id="p-cut">Effacer</button><button class="okb" id="p-ok" aria-label="Valider">✓</button></div>
+  <div class="pop" id="pop"><button id="p-copy">Copier</button><button id="p-cut">Effacer</button><button id="p-reset" aria-label="Revenir à la position d'origine" style="font-size:18px;width:40px;padding:0">↺</button><button class="okb" id="p-ok" aria-label="Valider">✓</button></div>
   <div class="pop" id="paste"><button id="p-paste">Coller</button></div>
  </main>
 </div>
@@ -198,7 +198,9 @@ function pathOf(s){let P=paths.get(s);if(!P){const st=dec(s);P={c:st.c,path:new 
  for(const q of st.p){P.x0=Math.min(P.x0,q[0]);P.x1=Math.max(P.x1,q[0]);P.y0=Math.min(P.y0,q[1]);P.y1=Math.max(P.y1,q[1])}
  if(paths.size>6000)paths.clear();paths.set(s,P)}return P}
 const inkCol=()=>getComputedStyle(document.body).color;
-const col=c=>c==='ink'?inkCol():c;
+const SHADE={'#2457c5':'#3f80ea','#d23a2a':'#ec5a4c','#2e8b4e':'#3cb468'}; // couleurs plus claires à l'affichage
+const shade=c=>SHADE[c]||c;
+const col=c=>c==='ink'?inkCol():shade(c);
 
 /* ---------- feuille : canevas de la taille de l'écran, défilement virtuel ---------- */
 function size(){
@@ -217,7 +219,7 @@ function redraw(){
   cx.strokeStyle=getComputedStyle(document.querySelector('.bar')).borderBottomColor;cx.lineWidth=1/scale;cx.beginPath();
   for(let y=Math.ceil(top/LINE)*LINE;y<bot;y+=LINE){cx.moveTo(0,y);cx.lineTo(W,y)}cx.stroke();
   const ic=inkCol();
-  for(const s of n.ink){const P=pathOf(s);if(P.y1<top-10||P.y0>bot+10)continue;cx.fillStyle=P.c==='ink'?ic:P.c;cx.fill(P.path,'nonzero')}}
+  for(const s of n.ink){const P=pathOf(s);if(P.y1<top-10||P.y0>bot+10)continue;cx.fillStyle=P.c==='ink'?ic:shade(P.c);cx.fill(P.path,'nonzero')}}
  drawLive();
 }
 sheet.addEventListener('scroll',()=>requestAnimationFrame(redraw),{passive:true});
@@ -226,11 +228,11 @@ sheet.addEventListener('scroll',()=>requestAnimationFrame(redraw),{passive:true}
 function drawLive(){
  lx.setTransform(1,0,0,1,0,0);lx.clearRect(0,0,live.width,live.height);setT(lx);
  if(drawing&&drawing.st){lx.fillStyle=col(drawing.st.c);lx.beginPath();trace(lx,drawing.st.p);lx.fill('nonzero')}
- if(lasso&&lasso.length>1){lx.strokeStyle='#f07a1a';lx.lineWidth=1.6/scale;lx.setLineDash([6/scale,5/scale]);lx.beginPath();
+ if(lasso&&lasso.length>1){lx.strokeStyle='#f07a1a';lx.lineWidth=1.6/scale;lx.lineCap='round';lx.lineWidth=2.6/scale;lx.setLineDash([.01,7/scale]);lx.beginPath();
   lasso.forEach((q,i)=>i?lx.lineTo(q[0],q[1]):lx.moveTo(q[0],q[1]));lx.stroke();lx.setLineDash([])}
  if(sel){const b=sel.box,c=sel.c;lx.save();lx.translate(c[0]+sel.tx,c[1]+sel.ty);lx.rotate(sel.a);lx.translate(-c[0],-c[1]);
-  const ic=inkCol();for(const s of sel.strokes){const P=pathOf(s);lx.fillStyle=P.c==='ink'?ic:P.c;lx.fill(P.path,'nonzero')}
-  lx.strokeStyle='#f07a1a';lx.lineWidth=1.4/scale;lx.setLineDash([6/scale,5/scale]);lx.strokeRect(b.x0-10,b.y0-10,b.x1-b.x0+20,b.y1-b.y0+20);lx.setLineDash([]);
+  const ic=inkCol();for(const s of sel.strokes){const P=pathOf(s);lx.fillStyle=P.c==='ink'?ic:shade(P.c);lx.fill(P.path,'nonzero')}
+  lx.strokeStyle='#f07a1a';lx.lineCap='round';lx.lineWidth=2.6/scale;lx.setLineDash([.01,7/scale]);lx.strokeRect(b.x0-10,b.y0-10,b.x1-b.x0+20,b.y1-b.y0+20);lx.setLineDash([]);
   const hy=b.y0-10-HANDLE;lx.beginPath();lx.moveTo(c[0],b.y0-10);lx.lineTo(c[0],hy+11/scale);lx.stroke();
   lx.fillStyle='#fff';lx.beginPath();lx.arc(c[0],hy,11/scale,0,Math.PI*2);lx.fill();lx.stroke();
   lx.beginPath();lx.arc(c[0],hy,5/scale,-2.2,1.3);lx.stroke();lx.restore()}
@@ -260,6 +262,7 @@ function finishLasso(){const poly=lasso;lasso=null;const n=notes[cur];if(!n||!po
  const pick=[],rest=[];for(const s of n.ink){const P=pathOf(s);let k=0;for(const q of P.p)if(inside(q,poly))k++;(k/P.p.length>=.5?pick:rest).push(s)}
  if(!pick.length){drawLive();return}snap();n.ink=rest;makeSel(pick);redraw()}
 $('p-ok').onclick=()=>commitSel();
+$('p-reset').onclick=()=>{if(!sel)return;sel.tx=sel.ty=sel.a=0;size()};
 $('p-cut').onclick=()=>{if(!sel)return;sel=null;size();changed();toast('Sélection effacée')};
 $('p-copy').onclick=()=>{if(!sel)return;const st=bakedStrokes();const b=boxOf(st);const c=[(b.x0+b.x1)/2,(b.y0+b.y1)/2];
  clip=st.map(s=>{const d=dec(s);d.p=d.p.map(q=>[q[0]-c[0],q[1]-c[1],q[2]]);return enc(d)});commitSel();
@@ -282,6 +285,10 @@ function recognize(p){
  ee/=p.length;er/=p.length;if(Math.min(ee,er)>.22)return null;
  if(er<ee){const c=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];return[...seg(c[0],c[1]),...seg(c[1],c[2]),...seg(c[2],c[3]),...seg(c[3],c[0]),[x0,y0,pr]]}
  const o=[],N=Math.max(48,Math.round((rx+ry)/2));for(let i=0;i<=N;i++){const t=i/N*Math.PI*2;o.push([ox+rx*Math.cos(t),oy+ry*Math.sin(t),pr])}return o}
+/* fin de trait : la pointe rattrape doucement la position réelle, puis léger adoucissement global */
+function finish(p,r){let l=p[p.length-1];for(let i=0;i<6&&Math.hypot(r[0]-l[0],r[1]-l[1])>.7;i++){l=[l[0]+(r[0]-l[0])*.5,l[1]+(r[1]-l[1])*.5,l[2]];p.push(l)}}
+function relax(p){if(p.length<5)return p;let a=p;for(let k=0;k<2;k++){const b=[a[0]];
+ for(let i=1;i<a.length-1;i++)b.push([(a[i-1][0]+2*a[i][0]+a[i+1][0])/4,(a[i-1][1]+2*a[i][1]+a[i+1][1])/4,a[i][2]]);b.push(a[a.length-1]);a=b}return a}
 function armHold(){const d=drawing;clearTimeout(d.hold);d.hold=setTimeout(()=>{if(drawing!==d||!d.st||d.snapped)return;
  const r=recognize(d.st.p);if(r){d.st.p=r;d.snapped=true;drawLive()}},550)}
 
@@ -334,7 +341,9 @@ live.addEventListener('pointermove',e=>{
   if(drawing.er){(drawing.er==='er'?eraseWhole:erasePart)(q);continue}
   if(!drawing.st||drawing.snapped)continue;
   const p=drawing.st.p,l=p[p.length-1];
-  const s=[l[0]+(q[0]-l[0])*.55,l[1]+(q[1]-l[1])*.55,Math.round(l[2]*.6+q[2]*.4)]; // lissage de la main
+  // assistance de courbure : la pointe « tire » le trait avec un peu de retard (plus fort quand on écrit lentement)
+  const d=Math.hypot(q[0]-l[0],q[1]-l[1]),f=Math.min(.75,.38+d/30);
+  const s=[l[0]+(q[0]-l[0])*f,l[1]+(q[1]-l[1])*f,Math.round(l[2]*.65+q[2]*.35)];
   if(Math.hypot(q[0]-drawing.anchor[0],q[1]-drawing.anchor[1])>3){drawing.anchor=q;armHold()}
   if(Math.hypot(s[0]-l[0],s[1]-l[1])<.7)continue;p.push(s);drawing.raw=q}
  drawLive();
@@ -345,7 +354,7 @@ const up=e=>{
  if(!drawing||e.pointerId!==drawing.id)return;lastPen=Date.now();clearTimeout(drawing.hold);
  if(drawing.lasso){drawing=null;finishLasso();return}
  if(drawing.done){drawing=null;return}
- if(drawing.st){const p=drawing.st.p,r=drawing.raw,l=p[p.length-1];if(!drawing.snapped&&Math.hypot(r[0]-l[0],r[1]-l[1])>.7)p.push([r[0],r[1],l[2]]);
+ if(drawing.st){const p=drawing.st.p,r=drawing.raw,l=p[p.length-1];if(!drawing.snapped){finish(p,r);drawing.st.p=relax(p)}
   notes[cur].ink.push(enc(drawing.st));const y=Math.max(...p.map(q=>q[1]));drawing=null;
   if(y>pageH-sheet.clientHeight/scale*.6)size();else redraw();changed()}
  else{const n=notes[cur],last=undoS[undoS.length-1];if(last&&last.length===n.ink.length&&last.every((s,i)=>s===n.ink[i])){undoS.pop();btns()}drawing=null}
@@ -376,7 +385,7 @@ function changed(){const n=notes[cur];if(!n)return;n.t=Date.now();save();clearTi
 function open(id){commitSel();pasteAt=null;cur=id||null;undoS=[];redoS=[];app.classList.toggle('edit',!!notes[cur]);sheet.scrollTop=0;render();size()}
 function create(){const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);notes[id]={id,name:'',t:Date.now(),pin:false,ink:[]};save();open(id)}
 function cleanEmpty(){for(const n of Object.values(notes))if(n.id!==cur&&!n.ink.length&&!n.name)delete notes[n.id];save()}
-$('dots').innerHTML=COLORS.map(([c,l],i)=>`<button class="dot${i?'':' on'}" data-c="${c}" aria-label="${l}"><i style="background:${c==='ink'?'var(--ink)':c}"></i></button>`).join('');
+$('dots').innerHTML=COLORS.map(([c,l],i)=>`<button class="dot${i?'':' on'}" data-c="${c}" aria-label="${l}"><i style="background:${c==='ink'?'var(--ink)':shade(c)}"></i></button>`).join('');
 function setTool(t){if(t!==tool)commitSel();tool=t;pasteAt=null;for(const k of['pen','er','erp','sel'])$('t-'+k).classList.toggle('on',k===t);drawLive()}
 $('dots').addEventListener('click',e=>{const b=e.target.closest('.dot');if(!b)return;color=b.dataset.c;
  document.querySelectorAll('.dot').forEach(x=>x.classList.toggle('on',x===b));setTool('pen')});
@@ -416,7 +425,7 @@ $('imp').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=J
  save();render();redraw();toast(k+' note(s) importée(s)')}catch(err){toast('Fichier illisible')}e.target.value=''};
 
 /* ---------- export PDF vectoriel (A4, sans bibliothèque) ---------- */
-function hex(c){if(c==='ink')return'0 0 0';const m=c.match(/^#(..)(..)(..)$/);return m?[1,2,3].map(i=>(parseInt(m[i],16)/255).toFixed(3)).join(' '):'0 0 0'}
+function hex(c){if(c==='ink')return'0 0 0';const m=shade(c).match(/^#(..)(..)(..)$/);return m?[1,2,3].map(i=>(parseInt(m[i],16)/255).toFixed(3)).join(' '):'0 0 0'}
 function pdfOf(n){
  const PW=595.28,PHt=841.89,k=PW/W,PH=PHt/k;let maxY=0;for(const s of n.ink){const P=pathOf(s);if(P.y1>maxY)maxY=P.y1}
  const pages=Math.max(1,Math.ceil((maxY+10)/PH)),f=v=>v.toFixed(1),streams=[];
@@ -460,7 +469,8 @@ $('zip').onclick=async()=>{commitSel();const arr=sorted().filter(n=>n.ink.length
  for(const n of arr){let b=n.name?fname(n):'note '+new Date(n.t).toISOString().slice(0,16).replace('T',' ').replace(':','h');
   let nm=b,i=2;while(used[nm.toLowerCase()])nm=b+' ('+(i++)+')';used[nm.toLowerCase()]=1;
   files.push({name:nm+'.pdf',data:new Uint8Array(await pdfOf(n).arrayBuffer())})}
- deliver(zipOf(files),'notor-pdf-'+stamp()+'.zip')};
+ files.push({name:'notor-sauvegarde-'+stamp()+'.json',data:new TextEncoder().encode(JSON.stringify(notes))});
+ if(await deliver(zipOf(files),'notor-'+stamp()+'.zip')){try{localStorage.setItem(KEY+'-export',Date.now())}catch(e){}warn('')}};
 
 const ro=new ResizeObserver(()=>size());ro.observe(sheet);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
