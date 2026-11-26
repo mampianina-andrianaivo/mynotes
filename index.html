@@ -93,8 +93,8 @@ main{display:flex;flex-direction:column;height:100%;background:var(--panel);over
  <symbol id="i-er" viewBox="0 0 24 24"><path d="M8 20h12"/><path d="M4.5 15.5l9-9a2 2 0 012.8 0l2.2 2.2a2 2 0 010 2.8L11 19H8z"/><path d="M9 11l5 5"/></symbol>
  <symbol id="i-erp" viewBox="0 0 24 24"><path d="M7 15.5l7-7a1.8 1.8 0 012.5 0l1 1a1.8 1.8 0 010 2.5l-6 6H8.5z"/><path d="M2.5 21h4M10.5 21h3M17.5 21h4"/></symbol>
  <symbol id="i-sel" viewBox="0 0 24 24"><path d="M12 4c5 0 8 2.5 8 5.5S16.5 15 12 15c-2 0-3.5-.4-4.6-1" stroke-dasharray="3 2.5"/><path d="M7.4 14C5 13 4 11.3 4 9.5 4 6.5 7 4 12 4"/><path d="M7.5 14c-1 1.5-.5 3.5 1.5 5"/></symbol>
- <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 010 12" transform="translate(0 -6)"/></symbol>
- <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 7l5 5-5 5"/><path d="M20 12H10a6 6 0 000 12" transform="translate(0 -6)"/></symbol>
+ <symbol id="i-undo" viewBox="0 0 24 24"><path d="M20 12H4M10 6l-6 6 6 6"/></symbol>
+ <symbol id="i-redo" viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></symbol>
  <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 10v7m-3-3l3 3 3-3"/></symbol>
  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 5 3 3H7l3-3z"/><path d="M12 12v8"/></symbol>
  <symbol id="i-pinf" viewBox="0 0 24 24"><path d="M9 4h6l-1 5 3 3H7l3-3z" fill="currentColor"/><path d="M12 12v8"/></symbol>
@@ -354,14 +354,16 @@ live.addEventListener('pointerdown',e=>{
  if(h&&!drawing&&(isPen(e)||Date.now()-lastPen>700)){e.preventDefault();cap(e);pasteAt=null;
   drag={id:e.pointerId,k:h,q,tx:sel.tx,ty:sel.ty,a:sel.a,a0:Math.atan2(q[1]-sel.c[1]-sel.ty,q[0]-sel.c[0]-sel.tx)};if(isPen(e))lastPen=Date.now();drawLive();return}
  if(!isPen(e)){ // doigt ou paume : défilement à un doigt, ignoré pendant et juste après le stylet
-  if(drawing||Date.now()-lastPen<700)return;pan={id:e.pointerId,y:e.clientY,top:sheet.scrollTop};return}
+  if(drawing||Date.now()-lastPen<700)return;pan={id:e.pointerId,y:e.clientY,x:e.clientX,top:sheet.scrollTop,t0:Date.now(),moved:0};return}
  e.preventDefault();cap(e);pan=null;lastPen=Date.now();
  if(pasteAt){pasteAt=null;drawLive()}
  if(sel){commitSel();if(tool==='sel'){drawing={id:e.pointerId,done:1};return}}
  if(tool==='sel'){lasso=[q];const d=drawing={id:e.pointerId,lasso:1};
-  if(clip)d.hold=setTimeout(()=>{if(drawing===d&&lasso&&lasso.every(a=>Math.hypot(a[0]-q[0],a[1]-q[1])<6)){lasso=null;pasteAt=q;drawing=null;drawLive()}},500);return}
+  d.hold=setTimeout(()=>{if(drawing===d&&lasso&&lasso.every(a=>Math.hypot(a[0]-q[0],a[1]-q[1])<6)){lasso=null;drawing=null;if(clip){pasteAt=q;drawLive()}else toPen()}},clip?500:600);return}
  snap();
- if(tool==='er'||tool==='erp'){drawing={id:e.pointerId,er:tool};(tool==='er'?eraseWhole:erasePart)(q);return}
+ if(tool==='er'||tool==='erp'){const d=drawing={id:e.pointerId,er:tool,start:q};(tool==='er'?eraseWhole:erasePart)(q);
+  // appui long sans bouger : on annule ce coup de gomme et on repasse au stylo
+  d.hold=setTimeout(()=>{if(drawing!==d)return;drawing=null;const n=notes[cur],b=undoS.pop();if(n&&b){n.ink=b;redraw();changed()}btns();toPen()},600);return}
  drawing={id:e.pointerId,st:{c:color,p:[q]},raw:q,anchor:q};armHold();drawLive();
 });
 live.addEventListener('pointermove',e=>{
@@ -376,7 +378,7 @@ live.addEventListener('pointermove',e=>{
  if(drawing.st){evs=evs.filter(ev=>{if(ev.timeStamp&&drawing.ts&&ev.timeStamp<=drawing.ts)return false;drawing.ts=ev.timeStamp||drawing.ts;return true})}
  for(const ev of evs){const q=pos(ev);
   if(drawing.lasso){const l=lasso[lasso.length-1];if(Math.hypot(q[0]-l[0],q[1]-l[1])>2)lasso.push(q);continue}
-  if(drawing.er){(drawing.er==='er'?eraseWhole:erasePart)(q);continue}
+  if(drawing.er){if(drawing.hold&&Math.hypot(q[0]-drawing.start[0],q[1]-drawing.start[1])>6){clearTimeout(drawing.hold);drawing.hold=0}(drawing.er==='er'?eraseWhole:erasePart)(q);continue}
   if(!drawing.st||drawing.snapped)continue;
   const p=drawing.st.p,l=p[p.length-1];
   if(p.length>2){const k=p[p.length-3],dx=l[0]-k[0],dy=l[1]-k[1],dl=Math.hypot(dx,dy);
@@ -390,7 +392,9 @@ live.addEventListener('pointermove',e=>{
 });
 const up=e=>{
  if(drag&&e.pointerId===drag.id){drag=null;size();return}
- if(pan&&e.pointerId===pan.id)pan=null;
+ if(pan&&e.pointerId===pan.id){ // double tape au doigt = retour au stylo
+  if(Date.now()-pan.t0<280&&Math.hypot(e.clientX-pan.x,e.clientY-pan.y)<12&&Date.now()-lastPen>700){if(Date.now()-lastTap<380){lastTap=0;toPen()}else lastTap=Date.now()}
+  pan=null}
  if(!drawing||e.pointerId!==drawing.id)return;lastPen=Date.now();clearTimeout(drawing.hold);
  if(drawing.lasso){drawing=null;finishLasso();return}
  if(drawing.done){drawing=null;return}
@@ -426,6 +430,8 @@ function open(id){commitSel();pasteAt=null;cur=id||null;undoS=[];redoS=[];app.cl
 function create(){const id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);notes[id]={id,name:'',t:Date.now(),pin:false,ink:[]};save();open(id)}
 function cleanEmpty(){for(const n of Object.values(notes))if(n.id!==cur&&!n.ink.length&&!n.name)delete notes[n.id];save()}
 $('dots').innerHTML=COLORS.map(([c,l],i)=>`<button class="dot${i?'':' on'}" data-c="${c}" aria-label="${l}"><i style="background:${c==='ink'?'var(--ink)':shade(c)}"></i></button>`).join('');
+let lastTap=0;
+function toPen(){if(tool!=='pen'){setTool('pen');toast('Stylo')}}
 function setTool(t){if(t!==tool)commitSel();tool=t;pasteAt=null;for(const k of['pen','er','erp','sel'])$('t-'+k).classList.toggle('on',k===t);drawLive()}
 $('dots').addEventListener('click',e=>{const b=e.target.closest('.dot');if(!b)return;color=b.dataset.c;
  document.querySelectorAll('.dot').forEach(x=>x.classList.toggle('on',x===b));setTool('pen')});
