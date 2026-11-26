@@ -178,7 +178,8 @@ function toast(m){const e=$('msg');e.textContent=m;e.classList.add('on');clearTi
 const enc=st=>st.c+'|'+st.p.map(q=>q[0].toFixed(1)+' '+q[1].toFixed(1)+' '+q[2]).join(' ');
 function dec(s){const parts=s.split('|');const a=parts[parts.length-1].split(' ').map(Number),p=[];
  for(let i=0;i+2<a.length;i+=3)p.push([a[i],a[i+1],a[i+2]]);return{c:parts[0],p}}
-const rad=pr=>BASE*(.32+.95*pr/9)/2;
+// épaisseur selon l'appui : 2 (léger) à 9 (fort). 1 = anciens traits, gardés à leur épaisseur d'origine
+const rad=pr=>BASE*(pr<=1?.425:.2+.06*pr)/2;
 function outline(p){const L=[],R=[],r=[];
  for(let i=0;i<p.length;i++){const a=p[Math.max(0,i-1)],b=p[Math.min(p.length-1,i+1)];
   let dx=b[0]-a[0],dy=b[1]-a[1];const d=Math.hypot(dx,dy)||1;dx/=d;dy/=d;const ri=rad(p[i][2]);r.push(ri);
@@ -318,10 +319,12 @@ function recognize(p){
  const o=[],N=Math.max(48,Math.round((rx+ry)/2));for(let i=0;i<=N;i++){const t=i/N*Math.PI*2;o.push([ox+rx*Math.cos(t),oy+ry*Math.sin(t),pr])}return o}
 /* fin de trait : la pointe rattrape doucement la position réelle, puis léger adoucissement global */
 function finish(p,r){let l=p[p.length-1];for(let i=0;i<6&&Math.hypot(r[0]-l[0],r[1]-l[1])>.7;i++){l=[l[0]+(r[0]-l[0])*.5,l[1]+(r[1]-l[1])*.5,l[2]];p.push(l)}}
+function despike(p){const o=[p[0]];for(let i=1;i<p.length;i++){const l=o[o.length-1],k=o[o.length-2];
+ if(k){const dx=l[0]-k[0],dy=l[1]-k[1],dl=Math.hypot(dx,dy);if(dl>.5&&((p[i][0]-l[0])*dx+(p[i][1]-l[1])*dy)/dl<0&&Math.hypot(p[i][0]-l[0],p[i][1]-l[1])<6)continue}o.push(p[i])}return o}
 function relax(p){if(p.length<5)return p;let a=p;for(let k=0;k<2;k++){const b=[a[0]];
  for(let i=1;i<a.length-1;i++)b.push([(a[i-1][0]+2*a[i][0]+a[i+1][0])/4,(a[i-1][1]+2*a[i][1]+a[i+1][1])/4,a[i][2]]);b.push(a[a.length-1]);a=b}return a}
 function armHold(){const d=drawing;clearTimeout(d.hold);d.hold=setTimeout(()=>{if(drawing!==d||!d.st||d.snapped)return;
- const r=recognize(d.st.p);if(r){d.st.p=r;d.snapped=true;drawLive()}},550)}
+ const r=recognize(relax(despike(d.st.p)));if(r){d.st.p=r;d.snapped=true;drawLive()}},550)}
 
 /* ---------- gommes ---------- */
 const near=(P,q)=>!(q[0]<P.x0-ERR||q[0]>P.x1+ERR||q[1]<P.y0-ERR||q[1]>P.y1+ERR);
@@ -336,7 +339,9 @@ function erasePart(q){const n=notes[cur];let hit=false;const out=[];
  if(hit){n.ink=out;redraw();changed()}}
 
 /* ---------- saisie : stylet uniquement, paume et doigts ignorés ---------- */
-const pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/scale,(e.clientY-r.top)/scale+sheet.scrollTop/scale,Math.max(1,Math.min(9,Math.round((e.pressure||.5)*9)))]};
+// le Pencil envoie des pressions faibles (souvent < 0,2) : courbe qui étale cette plage sur 2..9
+const press=e=>e.pointerType!=='pen'?4:2+Math.round(7*Math.min(1,Math.pow(Math.max(0,e.pressure||0)/.45,.6)));
+const pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/scale,(e.clientY-r.top)/scale+sheet.scrollTop/scale,press(e)]};
 const cap=e=>{try{live.setPointerCapture(e.pointerId)}catch(_){}};
 const isPen=e=>e.pointerType==='pen'||e.pointerType==='mouse';
 function snap(){const n=notes[cur];undoS.push(n.ink.slice());if(undoS.length>100)undoS.shift();redoS=[];btns()}
@@ -366,12 +371,16 @@ live.addEventListener('pointermove',e=>{
   drawLive();return}
  if(pan&&e.pointerId===pan.id){sheet.scrollTop=pan.top-(e.clientY-pan.y);return}
  if(!drawing||e.pointerId!==drawing.id)return;lastPen=Date.now();
- const ce=e.getCoalescedEvents?e.getCoalescedEvents():[],evs=ce.length?ce:[e];
+ const ce=e.getCoalescedEvents?e.getCoalescedEvents():[];let evs=ce.length?ce:[e];
+ // iPad : certains points arrivent en double ou en retard (petits allers-retours) → on les écarte
+ if(drawing.st){evs=evs.filter(ev=>{if(ev.timeStamp&&drawing.ts&&ev.timeStamp<=drawing.ts)return false;drawing.ts=ev.timeStamp||drawing.ts;return true})}
  for(const ev of evs){const q=pos(ev);
   if(drawing.lasso){const l=lasso[lasso.length-1];if(Math.hypot(q[0]-l[0],q[1]-l[1])>2)lasso.push(q);continue}
   if(drawing.er){(drawing.er==='er'?eraseWhole:erasePart)(q);continue}
   if(!drawing.st||drawing.snapped)continue;
   const p=drawing.st.p,l=p[p.length-1];
+  if(p.length>2){const k=p[p.length-3],dx=l[0]-k[0],dy=l[1]-k[1],dl=Math.hypot(dx,dy);
+   if(dl>1.5&&((q[0]-l[0])*dx+(q[1]-l[1])*dy)/dl<0&&Math.hypot(q[0]-l[0],q[1]-l[1])<6)continue} // petit recul : ignoré
   // assistance de courbure : la pointe « tire » le trait avec un peu de retard (plus fort quand on écrit lentement)
   const d=Math.hypot(q[0]-l[0],q[1]-l[1]),f=Math.min(.75,.38+d/30);
   const s=[l[0]+(q[0]-l[0])*f,l[1]+(q[1]-l[1])*f,Math.round(l[2]*.65+q[2]*.35)];
